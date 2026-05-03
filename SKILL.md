@@ -1,27 +1,30 @@
 ---
 name: web-screenshot
-description: 自动给网页截图。当用户说"截图"/"screenshot"/"拍个图"/"截屏"/"截一下 dashboard"/"给 localhost 截个图"或类似意图时触发。能处理静态页截图、元素自截、点击交互后截图。出图就完事，不管 README 排版。
+description: Use when 用户说"截图"/"screenshot"/"拍个图"/"截屏"/"截一下 dashboard"/"给 localhost 截个图"/"截下 #foo 元素"/"点 X 按钮再截图"，或要把任何 URL 拍成 PNG 时触发。
 ---
 
-# web-screenshot — 网页自动截图 skill
+# web-screenshot
 
-## 这个 skill 是干啥的
+## Overview
 
-用户用自然语言描述截屏需求，你（Claude Code）按本指引：
-1. 跟用户对齐细节
-2. 写一份 `capture.mjs` 临时剧本
-3. 调用 lib 里的脚本准备环境
-4. 用 Node 跑剧本，出 PNG
-5. 报告结果
+把"拍网页"做成自然语言交互：用户说要啥，Claude Code 现写 `capture.mjs` 临时剧本，跑 Node + puppeteer-core + chrome-headless-shell，出 PNG。
 
-技术栈：**Node 18+ + puppeteer-core + chrome-headless-shell**。
+**Core principle:** skill 自己装所有运行时依赖到 `~/.cache/web-screenshot/`，用户只要 Node 18+。已有 Playwright / Puppeteer 缓存自动复用。
 
-依赖只有一个硬条件：**Node 18+**（`brew install node` / nodejs.org 下载）。
-其他东西 skill 自己装：
-- `puppeteer-core` → 第一次跑时 `npm install` 到 `~/.cache/web-screenshot/runtime/`
-- `chrome-headless-shell`（无头浏览器，~80MB）→ 第一次跑时 `npx @puppeteer/browsers install` 到 `~/.cache/web-screenshot/chrome/`
+## When to Use
 
-如果机器上已经装过 Playwright 或 Puppeteer（缓存里有 chrome-headless-shell），自动复用，不重复下载。
+触发症状：
+- "给 https://example.com 截个图"
+- "截一下 dashboard 的 #sidebar"
+- "先点登录按钮，等加载完再截首页"
+- "截个手机版（390 宽）的 #pricing"
+- 给 localhost 服务、远程公网站点、SPA 里特定元素拍 PNG
+
+**不要用：**
+- 截桌面应用 / 你本地打开的浏览器窗口 → skill 只能截 URL，不能截已打开的窗口
+- 截要登录的页面 → 需要 cookie 注入，本 skill 不管
+- 跑 visual regression diff → 那是 percy/chromatic 的活
+- 管 README 里图片排版 → 出图就完事，排版另说
 
 ## 工作流（按顺序执行）
 
@@ -139,7 +142,7 @@ await new Promise(r => setTimeout(r, 30_000));
 
 ### LLM 接口慢的话 timeout 给到 130 秒
 
-我们之前 token-usage 的 AI 解读按钮要 30-90 秒，给 130 秒留 buffer。
+如果交互后等待的元素由慢接口生成（LLM 调用、外部 API），等待常常 30-90 秒。waitForFunction timeout 给 120-130 秒留 buffer，不要默认的 30 秒。
 
 ### 文件用 .mjs 而不是 .js 或 .ts
 
@@ -157,20 +160,12 @@ Node ESM 的 `import` 从**脚本文件位置**找 node_modules，不像 CJS 从
 
 `npx @puppeteer/browsers install` 第一次跑要先下载 `@puppeteer/browsers` 包本身（~30s）再下载 chrome-headless-shell（~80MB / 1-3 分钟）。期间脚本不响应。如果用户不想等 / 网烂，加 `WEB_SCREENSHOT_NO_AUTO_INSTALL=1` 让 find-chrome.sh 直接报错而不是阻塞。
 
-## 调用例子（自己参考）
+## Canonical example
 
-### 例 1：用户说"给 localhost:8787 的整个页面截一张图"
-- 不用问交互、不用问选择器
-- 拍法：直接 `page.screenshot({ fullPage: true })`
-- 输出：默认 /tmp 目录
-
-### 例 2：用户说"给 token-usage dashboard 的三个区域分别截图，要点 AI 按钮等结果"
-- 问清三个区域的 selector 各是什么
-- 第三张是交互模式：click + waitForFunction + element.screenshot
-- 三张存同一目录
-
-### 例 3：用户说"给我现在打开的网页截个图"
-- 不行，告诉用户：这个 skill 只能截 URL，不能截已打开的窗口。让他给个 URL。
+用户："给 localhost:8787 的整个页面截一张图"
+- URL 明确、无交互、无 selector → 不要再问，直接动手
+- 拍法：`page.screenshot({ fullPage: true })`
+- 输出：默认 `/tmp/screenshots-<ts>/`
 
 ## 留 capture.mjs 还是扔
 
@@ -190,9 +185,3 @@ skill 自管的所有缓存都在 `~/.cache/web-screenshot/`：
 
 要彻底重置：`rm -rf ~/.cache/web-screenshot/`。下次跑 skill 会自动重建。
 
-## 不做的事
-
-- 不管 README 怎么排版图片（留给用户/下一个 skill）
-- 不做 visual regression diff（那是 percy/chromatic 的领地）
-- 不能截要登录的页面（cookie 注入是另一码事，这个 skill 不管）
-- 不能截非 URL 的东西（你电脑当前打开的应用窗口、PDF 等）
