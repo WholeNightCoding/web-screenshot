@@ -156,6 +156,28 @@ Node ESM 的 `import` 从**脚本文件位置**找 node_modules，不像 CJS 从
 
 `lib/template.mjs` 已经用 `createRequire(file://${RUNTIME}/)` + `require('puppeteer-core')` 解决了。生成新剧本时**必须保留这套**，不要简化成普通 `import`。
 
+### 字体没加载完容易截到 fallback
+
+CJK 站点 / 用 Web Font 的站点常见。固定 4 秒 wait 通常够，但字体多 / 网慢的站建议显式等：
+
+```js
+await page.evaluate(() => document.fonts.ready);
+```
+
+### Cookie / GDPR / 通知弹窗会挡内容
+
+公网站点常见。截前 try-dismiss，或注 CSS 直接干掉：
+
+```js
+await page.evaluate(() => {
+  document.querySelectorAll(
+    '[id*="cookie"], [class*="consent"], [class*="gdpr"], [class*="banner"]'
+  ).forEach(el => el.remove());
+});
+```
+
+抓不全所有命名（每个站不同），但覆盖 80% 常见情况。截 localhost / 自家 dashboard 一般不需要。
+
 ### 自动下载 chrome 后第一次跑可能慢
 
 `npx @puppeteer/browsers install` 第一次跑要先下载 `@puppeteer/browsers` 包本身（~30s）再下载 chrome-headless-shell（~80MB / 1-3 分钟）。期间脚本不响应。如果用户不想等 / 网烂，加 `WEB_SCREENSHOT_NO_AUTO_INSTALL=1` 让 find-chrome.sh 直接报错而不是阻塞。
